@@ -1,4 +1,3 @@
-
 import os
 from typing import Dict, TypedDict
 
@@ -6,7 +5,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
-from langgraph.graph import END, StateGraph
 import streamlit as st
 
 # --- 1. Page & Custom Theme Setup ---
@@ -48,13 +46,7 @@ st.markdown(
 )
 
 
-# --- 2. Agent Logic & LangGraph Workflow ---
-class AgentState(TypedDict):
-    raw_data: dict
-    computed_metrics: dict
-    final_report: str
-
-
+# --- 2. Helper & Computation Functions ---
 def compute_metrics(raw: dict) -> dict:
     google_spend = raw["google_ads"]["spend"]
     meta_spend = raw["meta_ads"]["spend"]
@@ -101,7 +93,7 @@ def run_agent(raw_data: dict, api_key: str) -> dict:
 
     llm = ChatGroq(
         groq_api_key=api_key,
-        model_name="openai/gpt-oss-120b",
+        model_name="llama-3.3-70b-versatile",
         temperature=0.0,
     )
 
@@ -152,13 +144,35 @@ groq_api_key = st.sidebar.text_input(
     "Groq API Key", value=default_key, type="password"
 )
 
+# Sample CSV Template Download Option
+sample_df = pd.DataFrame(
+    {
+        "date": ["2026-09-12", "2026-09-13"],
+        "google_spend": [70.00, 65.00],
+        "google_clicks": [110, 105],
+        "meta_spend": [55.00, 60.00],
+        "meta_clicks": [170, 180],
+        "mqls": [6, 7],
+        "pipeline": [4000.0, 4500.0],
+        "target_cpa": [50.0, 50.0],
+    }
+)
+st.sidebar.download_button(
+    label="📥 Download CSV Template",
+    data=sample_df.to_csv(index=False).encode("utf-8"),
+    file_name="sample_ads_data.csv",
+    mime="text/csv",
+)
+
+st.sidebar.divider()
+
 # Data Input Source Selector
 input_source = st.sidebar.radio(
     "📥 Choose Data Source",
     options=["Manual Input", "Upload CSV File", "Google Sheet URL"],
 )
 
-# Default values initialization
+# Default values
 g_spend, g_clicks = 500.0, 800
 m_spend, m_clicks = 400.0, 1200
 mqls, pipeline, target_cpa = 45, 30000.0, 50.0
@@ -184,48 +198,49 @@ elif input_source == "Upload CSV File":
     if uploaded_file is not None:
         try:
             df = pd.read_csv(uploaded_file)
-            st.sidebar.success("CSV Uploaded!")
-            # Assuming CSV has aggregated sums or single row values
-            g_spend = float(df["google_spend"].sum()) if "google_spend" in df else g_spend
-            g_clicks = int(df["google_clicks"].sum()) if "google_clicks" in df else g_clicks
-            m_spend = float(df["meta_spend"].sum()) if "meta_spend" in df else m_spend
-            m_clicks = int(df["meta_clicks"].sum()) if "meta_clicks" in df else m_clicks
-            mqls = int(df["mqls"].sum()) if "mqls" in df else mqls
-            pipeline = float(df["pipeline"].sum()) if "pipeline" in df else pipeline
-            target_cpa = float(df["target_cpa"].iloc[0]) if "target_cpa" in df else target_cpa
+            st.sidebar.success("✅ CSV Loaded Successfully!")
+            
+            # Dynamic calculation from uploaded CSV
+            g_spend = float(df["google_spend"].sum()) if "google_spend" in df.columns else g_spend
+            g_clicks = int(df["google_clicks"].sum()) if "google_clicks" in df.columns else g_clicks
+            m_spend = float(df["meta_spend"].sum()) if "meta_spend" in df.columns else m_spend
+            m_clicks = int(df["meta_clicks"].sum()) if "meta_clicks" in df.columns else m_clicks
+            mqls = int(df["mqls"].sum()) if "mqls" in df.columns else mqls
+            pipeline = float(df["pipeline"].sum()) if "pipeline" in df.columns else pipeline
+            target_cpa = float(df["target_cpa"].iloc[0]) if "target_cpa" in df.columns else target_cpa
+            
+            # Display uploaded preview in sidebar
+            st.sidebar.markdown("**Uploaded Data Summary:**")
+            st.sidebar.write(df.head(3))
         except Exception as e:
-            st.sidebar.error(f"CSV read error: {e}")
-    else:
-        st.sidebar.info("CSV Structure Expected Columns: `google_spend`, `google_clicks`, `meta_spend`, `meta_clicks`, `mqls`, `pipeline`, `target_cpa`")
+            st.sidebar.error(f"Error reading CSV: {e}")
 
 elif input_source == "Google Sheet URL":
     st.sidebar.subheader("🔗 Google Sheet")
     sheet_url = st.sidebar.text_input("Public Google Sheet URL")
-    target_cpa = st.sidebar.number_input("Target CPA ($)", value=target_cpa, step=5.0)
 
     if sheet_url:
         try:
-            # Convert normal share link to export CSV link
             if "/edit" in sheet_url:
                 csv_url = sheet_url.split("/edit")[0] + "/export?format=csv"
             else:
                 csv_url = sheet_url
 
             df = pd.read_csv(csv_url)
-            st.sidebar.success("Google Sheet Connected!")
+            st.sidebar.success("✅ Google Sheet Connected!")
             
-            g_spend = float(df["google_spend"].sum()) if "google_spend" in df else g_spend
-            g_clicks = int(df["google_clicks"].sum()) if "google_clicks" in df else g_clicks
-            m_spend = float(df["meta_spend"].sum()) if "meta_spend" in df else m_spend
-            m_clicks = int(df["meta_clicks"].sum()) if "meta_clicks" in df else m_clicks
-            mqls = int(df["mqls"].sum()) if "mqls" in df else mqls
-            pipeline = float(df["pipeline"].sum()) if "pipeline" in df else pipeline
-            if "target_cpa" in df:
+            g_spend = float(df["google_spend"].sum()) if "google_spend" in df.columns else g_spend
+            g_clicks = int(df["google_clicks"].sum()) if "google_clicks" in df.columns else g_clicks
+            m_spend = float(df["meta_spend"].sum()) if "meta_spend" in df.columns else m_spend
+            m_clicks = int(df["meta_clicks"].sum()) if "meta_clicks" in df.columns else m_clicks
+            mqls = int(df["mqls"].sum()) if "mqls" in df.columns else mqls
+            pipeline = float(df["pipeline"].sum()) if "pipeline" in df.columns else pipeline
+            if "target_cpa" in df.columns:
                 target_cpa = float(df["target_cpa"].iloc[0])
         except Exception as e:
             st.sidebar.error("Public Sheet URL check karein (Anyone with link view access needed).")
 
-# Raw Payload Assembly
+# Raw Payload Assembly (Always Re-evaluated)
 raw_payload = {
     "google_ads": {"spend": g_spend, "clicks": g_clicks},
     "meta_ads": {"spend": m_spend, "clicks": m_clicks},
@@ -242,7 +257,7 @@ st.caption(
 )
 st.divider()
 
-# Top Metric Cards
+# Top Metric Cards (Auto-Updates on CSV Upload)
 c1, c2, c3, c4 = st.columns(4)
 
 with c1:
