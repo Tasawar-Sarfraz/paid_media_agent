@@ -32,16 +32,17 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
-# --- 2. Initialize Session State ---
-if "g_spend" not in st.session_state:
-    st.session_state.g_spend = 500.0
-    st.session_state.g_clicks = 800
-    st.session_state.m_spend = 400.0
-    st.session_state.m_clicks = 1200
-    st.session_state.mqls = 45
-    st.session_state.pipeline = 30000.0
-    st.session_state.target_cpa = 50.0
+# --- 2. Initialize Persistent Session State ---
+if "data" not in st.session_state:
+    st.session_state.data = {
+        "g_spend": 500.0,
+        "g_clicks": 800,
+        "m_spend": 400.0,
+        "m_clicks": 1200,
+        "mqls": 45,
+        "pipeline": 30000.0,
+        "target_cpa": 50.0,
+    }
 
 
 # --- 3. Metric Calculation Engine ---
@@ -115,7 +116,7 @@ def run_agent(raw_data: dict, api_key: str) -> dict:
     return {"computed": computed, "report": response.content}
 
 
-# --- 4. Sidebar Logic ---
+# --- 4. Sidebar Controls ---
 st.sidebar.title("⚙️ Control Panel")
 
 default_key = os.environ.get("GROQ_API_KEY", "")
@@ -128,62 +129,27 @@ input_source = st.sidebar.radio(
     options=["Manual Input", "Upload CSV File", "Google Sheet URL"],
 )
 
-if input_source == "Manual Input":
-    st.sidebar.subheader("🔵 Google Ads")
-    st.session_state.g_spend = st.sidebar.number_input(
-        "Google Spend ($)", value=float(st.session_state.g_spend), step=50.0
-    )
-    st.session_state.g_clicks = st.sidebar.number_input(
-        "Google Clicks", value=int(st.session_state.g_clicks), step=10
-    )
-
-    st.sidebar.subheader("🟣 Meta Ads")
-    st.session_state.m_spend = st.sidebar.number_input(
-        "Meta Spend ($)", value=float(st.session_state.m_spend), step=50.0
-    )
-    st.session_state.m_clicks = st.sidebar.number_input(
-        "Meta Clicks", value=int(st.session_state.m_clicks), step=10
-    )
-
-    st.sidebar.subheader("💼 CRM & Targets")
-    st.session_state.mqls = st.sidebar.number_input(
-        "MQLs / Leads", value=int(st.session_state.mqls), step=1
-    )
-    st.session_state.pipeline = st.sidebar.number_input(
-        "Pipeline ($)", value=float(st.session_state.pipeline), step=1000.0
-    )
-    st.session_state.target_cpa = st.sidebar.number_input(
-        "Target CPA ($)", value=float(st.session_state.target_cpa), step=5.0
-    )
-
-elif input_source == "Upload CSV File":
+# --- Process Upload / Inputs Immediately ---
+if input_source == "Upload CSV File":
     uploaded_file = st.sidebar.file_uploader("Upload CSV File", type=["csv"])
     if uploaded_file is not None:
         try:
             df = pd.read_csv(uploaded_file)
-
-            # Strip column spaces and force lowercase
             df.columns = df.columns.str.strip().str.lower()
 
-            # Session state update
-            if "google_spend" in df.columns:
-                st.session_state.g_spend = float(df["google_spend"].sum())
-            if "google_clicks" in df.columns:
-                st.session_state.g_clicks = int(df["google_clicks"].sum())
-            if "meta_spend" in df.columns:
-                st.session_state.m_spend = float(df["meta_spend"].sum())
-            if "meta_clicks" in df.columns:
-                st.session_state.m_clicks = int(df["meta_clicks"].sum())
-            if "mqls" in df.columns:
-                st.session_state.mqls = int(df["mqls"].sum())
-            if "pipeline" in df.columns:
-                st.session_state.pipeline = float(df["pipeline"].sum())
-            if "target_cpa" in df.columns:
-                st.session_state.target_cpa = float(df["target_cpa"].iloc[0])
+            # Parse and overwrite session state dictionary directly
+            new_data = {}
+            new_data["g_spend"] = float(df["google_spend"].sum()) if "google_spend" in df.columns else st.session_state.data["g_spend"]
+            new_data["g_clicks"] = int(df["google_clicks"].sum()) if "google_clicks" in df.columns else st.session_state.data["g_clicks"]
+            new_data["m_spend"] = float(df["meta_spend"].sum()) if "meta_spend" in df.columns else st.session_state.data["m_spend"]
+            new_data["m_clicks"] = int(df["meta_clicks"].sum()) if "meta_clicks" in df.columns else st.session_state.data["m_clicks"]
+            new_data["mqls"] = int(df["mqls"].sum()) if "mqls" in df.columns else st.session_state.data["mqls"]
+            new_data["pipeline"] = float(df["pipeline"].sum()) if "pipeline" in df.columns else st.session_state.data["pipeline"]
+            new_data["target_cpa"] = float(df["target_cpa"].iloc[0]) if "target_cpa" in df.columns else st.session_state.data["target_cpa"]
 
-            st.sidebar.success("✅ Dashboard Updated from CSV!")
-            st.sidebar.dataframe(df.head(2))
-
+            st.session_state.data = new_data
+            st.sidebar.success("✅ Dashboard Data Updated!")
+            st.sidebar.write("Loaded Data Summary:", df.sum(numeric_only=True).to_dict())
         except Exception as e:
             st.sidebar.error(f"Error reading CSV: {e}")
 
@@ -199,45 +165,56 @@ elif input_source == "Google Sheet URL":
             df = pd.read_csv(csv_url)
             df.columns = df.columns.str.strip().str.lower()
 
-            if "google_spend" in df.columns:
-                st.session_state.g_spend = float(df["google_spend"].sum())
-            if "google_clicks" in df.columns:
-                st.session_state.g_clicks = int(df["google_clicks"].sum())
-            if "meta_spend" in df.columns:
-                st.session_state.m_spend = float(df["meta_spend"].sum())
-            if "meta_clicks" in df.columns:
-                st.session_state.m_clicks = int(df["meta_clicks"].sum())
-            if "mqls" in df.columns:
-                st.session_state.mqls = int(df["mqls"].sum())
-            if "pipeline" in df.columns:
-                st.session_state.pipeline = float(df["pipeline"].sum())
-            if "target_cpa" in df.columns:
-                st.session_state.target_cpa = float(df["target_cpa"].iloc[0])
+            new_data = {}
+            new_data["g_spend"] = float(df["google_spend"].sum()) if "google_spend" in df.columns else st.session_state.data["g_spend"]
+            new_data["g_clicks"] = int(df["google_clicks"].sum()) if "google_clicks" in df.columns else st.session_state.data["g_clicks"]
+            new_data["m_spend"] = float(df["meta_spend"].sum()) if "meta_spend" in df.columns else st.session_state.data["m_spend"]
+            new_data["m_clicks"] = int(df["meta_clicks"].sum()) if "meta_clicks" in df.columns else st.session_state.data["m_clicks"]
+            new_data["mqls"] = int(df["mqls"].sum()) if "mqls" in df.columns else st.session_state.data["mqls"]
+            new_data["pipeline"] = float(df["pipeline"].sum()) if "pipeline" in df.columns else st.session_state.data["pipeline"]
+            new_data["target_cpa"] = float(df["target_cpa"].iloc[0]) if "target_cpa" in df.columns else st.session_state.data["target_cpa"]
 
-            st.sidebar.success("✅ Dashboard Updated from Google Sheet!")
+            st.session_state.data = new_data
+            st.sidebar.success("✅ Dashboard Data Updated!")
         except Exception as e:
-            st.sidebar.error("Error reading Google Sheet link.")
+            st.sidebar.error("Error reading Google Sheet URL.")
 
-# --- 5. Assemble Payload & Run Calcs ---
+else:
+    # Manual Inputs
+    st.sidebar.subheader("🔵 Google Ads")
+    st.session_state.data["g_spend"] = st.sidebar.number_input("Google Spend ($)", value=float(st.session_state.data["g_spend"]), step=50.0)
+    st.session_state.data["g_clicks"] = st.sidebar.number_input("Google Clicks", value=int(st.session_state.data["g_clicks"]), step=10)
+
+    st.sidebar.subheader("🟣 Meta Ads")
+    st.session_state.data["m_spend"] = st.sidebar.number_input("Meta Spend ($)", value=float(st.session_state.data["m_spend"]), step=50.0)
+    st.session_state.data["m_clicks"] = st.sidebar.number_input("Meta Clicks", value=int(st.session_state.data["m_clicks"]), step=10)
+
+    st.sidebar.subheader("💼 CRM & Targets")
+    st.session_state.data["mqls"] = st.sidebar.number_input("MQLs / Leads", value=int(st.session_state.data["mqls"]), step=1)
+    st.session_state.data["pipeline"] = st.sidebar.number_input("Pipeline ($)", value=float(st.session_state.data["pipeline"]), step=1000.0)
+    st.session_state.data["target_cpa"] = st.sidebar.number_input("Target CPA ($)", value=float(st.session_state.data["target_cpa"]), step=5.0)
+
+
+# --- 5. Build Dynamic Payload from Current State ---
 raw_payload = {
     "google_ads": {
-        "spend": st.session_state.g_spend,
-        "clicks": st.session_state.g_clicks,
+        "spend": st.session_state.data["g_spend"],
+        "clicks": st.session_state.data["g_clicks"],
     },
     "meta_ads": {
-        "spend": st.session_state.m_spend,
-        "clicks": st.session_state.m_clicks,
+        "spend": st.session_state.data["m_spend"],
+        "clicks": st.session_state.data["m_clicks"],
     },
     "crm_warehouse": {
-        "mqls": st.session_state.mqls,
-        "pipeline_usd": st.session_state.pipeline,
+        "mqls": st.session_state.data["mqls"],
+        "pipeline_usd": st.session_state.data["pipeline"],
     },
-    "business_targets": {"target_cpa": st.session_state.target_cpa},
+    "business_targets": {"target_cpa": st.session_state.data["target_cpa"]},
 }
 
 computed_live = compute_metrics(raw_payload)
 
-# --- 6. Main Dashboard Render ---
+# --- 6. Main Dashboard UI ---
 st.title("🎯 Paid Media AI Agent Dashboard")
 st.caption("Real-Time Reactive State • Multi-Source Data Support")
 st.divider()
@@ -297,7 +274,7 @@ with col_left:
     fig1.patch.set_facecolor("#0e1117")
     ax1.set_facecolor("#0e1117")
 
-    spends = [st.session_state.g_spend, st.session_state.m_spend]
+    spends = [st.session_state.data["g_spend"], st.session_state.data["m_spend"]]
     if sum(spends) > 0:
         ax1.pie(
             spends,
@@ -318,7 +295,7 @@ with col_right:
     fig2.patch.set_facecolor("#0e1117")
     ax2.set_facecolor("#0e1117")
 
-    values = [computed_live["actual_cpa"], st.session_state.target_cpa]
+    values = [computed_live["actual_cpa"], st.session_state.data["target_cpa"]]
     bar_colors = ["#ff4b4b" if values[0] > values[1] else "#00d4b1", "#8b92a5"]
 
     ax2.bar(["Actual CPA", "Target CPA"], values, color=bar_colors, width=0.5)
