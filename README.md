@@ -190,7 +190,6 @@ Install the required Python packages:
 ```bash
 pip install -r requirements.txt
 ```
-
 ---
 
 ### 3️⃣ Configure Environment Variables
