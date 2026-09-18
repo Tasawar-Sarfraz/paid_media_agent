@@ -83,7 +83,7 @@ def compute_metrics(raw: dict) -> dict:
 def run_agent(raw_data: dict, api_key: str) -> dict:
     computed = compute_metrics(raw_data)
     llm = ChatGroq(
-        groq_api_key=api_key, model_name="llama-3.3-70b-versatile", temperature=0.0
+        groq_api_key=api_key, model_name="openai/gpt-oss-120b", temperature=0.0
     )
 
     system_prompt = """
